@@ -2,11 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>NEON DASH 0.1 - OVERDRIVE BLOOM</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-    body { margin: 0; overflow: hidden; background: #020202; font-family: 'Orbitron', sans-serif; user-select: none; touch-action: none; }
+    body { margin: 0; overflow: hidden; background: #020202; font-family: 'Orbitron', sans-serif; user-select: none; }
     canvas { display: block; }
 </style>
 </head>
@@ -32,9 +31,7 @@ function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     const center = canvas.width / 2;
-    // Adapt lane spacing for smaller mobile screens
-    const spacing = Math.min(canvas.width / 3.5, 140);
-    lanePositions = [center - spacing, center, center + spacing];
+    lanePositions = [center - 140, center, center + 140];
 }
 window.addEventListener("resize", resize);
 resize();
@@ -50,8 +47,10 @@ let gameState = {
     timeSinceLastSpawn: 0,
     boostActive: false, boostTimer: 0, boostDuration: 600,
     spawnCooldown: 0,
-    midLevelBoostSpawned: false,
-    endLevelBoostSpawned: false
+    // Booster Rarity Logic
+    boostersSpawnedInLevel: 0,
+    maxBoostersPerLevel: 3,
+    nextGuaranteedBoostScore: 500 // Ensures at least one mid-level
 };
 
 const player = {
@@ -79,8 +78,8 @@ function resetGame() {
     gameState.score = 0; gameState.speed = 8; gameState.baseSpeed = 8;
     gameState.lastMilestone = 0; gameState.boostActive = false;
     gameState.boostTimer = 0; gameState.spawnCooldown = 0;
-    gameState.midLevelBoostSpawned = false;
-    gameState.endLevelBoostSpawned = false;
+    gameState.boostersSpawnedInLevel = 0;
+    gameState.nextGuaranteedBoostScore = 500;
     obstacles = []; boosts = []; particles = []; trail = [];
     initPlayer();
 }
@@ -96,7 +95,7 @@ function createExplosion(x, y, color, count = 30) {
     }
 }
 
-/* ============ INPUT (WASD + ARROWS + TOUCH) ============ */
+/* ============ INPUT ============ */
 document.addEventListener("keydown", e => {
     if (e.code === "Space") {
         if (!gameState.started || gameState.showGameOverUI) resetGame();
@@ -104,58 +103,11 @@ document.addEventListener("keydown", e => {
         return;
     }
     if (gameState.paused || gameState.gameOver || !gameState.started) return;
-    
-    // Left
-    if ((e.key === "ArrowLeft" || e.code === "KeyA") && player.lane > 0) { 
-        player.lane--; player.targetX = lanePositions[player.lane]; 
-    }
-    // Right
-    if ((e.key === "ArrowRight" || e.code === "KeyD") && player.lane < 2) { 
-        player.lane++; player.targetX = lanePositions[player.lane]; 
-    }
-    // Up / Jump
-    if ((e.key === "ArrowUp" || e.code === "KeyW") && !player.isJumping) { 
-        player.vy = -20; player.isJumping = true; 
-    }
+    if (e.key === "ArrowLeft" && player.lane > 0) { player.lane--; player.targetX = lanePositions[player.lane]; }
+    if (e.key === "ArrowRight" && player.lane < 2) { player.lane++; player.targetX = lanePositions[player.lane]; }
+    if (e.key === "ArrowUp" && !player.isJumping) { player.vy = -20; player.isJumping = true; }
 });
 
-// Touch Logic for Mobile
-let touchStartX = 0;
-let touchStartY = 0;
-
-canvas.addEventListener("touchstart", e => {
-    touchStartX = e.changedTouches[0].screenX;
-    touchStartY = e.changedTouches[0].screenY;
-    
-    // Start/Restart logic
-    if (!gameState.started || gameState.showGameOverUI) resetGame();
-    else if (gameState.paused) gameState.paused = false;
-}, {passive: false});
-
-canvas.addEventListener("touchend", e => {
-    if (!gameState.started || gameState.paused || gameState.gameOver) return;
-    
-    const dx = e.changedTouches[0].screenX - touchStartX;
-    const dy = e.changedTouches[0].screenY - touchStartY;
-    const absX = Math.abs(dx);
-    const absY = Math.abs(dy);
-
-    if (absX > 30 || absY > 30) {
-        if (absX > absY) {
-            // Horizontal Swipe
-            if (dx > 0 && player.lane < 2) { player.lane++; player.targetX = lanePositions[player.lane]; }
-            else if (dx < 0 && player.lane > 0) { player.lane--; player.targetX = lanePositions[player.lane]; }
-        } else {
-            // Vertical Swipe (Up)
-            if (dy < 0 && !player.isJumping) { player.vy = -20; player.isJumping = true; }
-        }
-    } else {
-        // Tap to jump
-        if (!player.isJumping) { player.vy = -20; player.isJumping = true; }
-    }
-}, {passive: false});
-
-// Legacy Mouse support for PC
 canvas.addEventListener("mousedown", () => {
     if (!gameState.started || gameState.showGameOverUI) resetGame();
     else if (gameState.paused) gameState.paused = false;
@@ -223,16 +175,19 @@ function update() {
         return;
     }
 
+    // Level Management
     let currentMilestone = Math.floor(gameState.score / 1000);
     if (currentMilestone > gameState.lastMilestone) {
         gameState.baseSpeed += 2.0; 
         gameState.lastMilestone = currentMilestone;
-        gameState.midLevelBoostSpawned = false;
-        gameState.endLevelBoostSpawned = false;
+        // Reset Level Rarity Counters
+        gameState.boostersSpawnedInLevel = 0;
+        gameState.nextGuaranteedBoostScore = (currentMilestone * 1000) + 500;
     }
 
     gameState.speed += (gameState.baseSpeed - gameState.speed) * 0.1;
 
+    // Boost Logic
     if (gameState.boostActive) {
         gameState.boostTimer--;
         if (gameState.boostTimer <= 0) {
@@ -258,25 +213,23 @@ function update() {
     trail.forEach(t => { t.y += gameState.speed * 0.5; t.x += t.vx; t.life -= 0.025; });
     trail = trail.filter(t => t.life > 0);
 
+    // Spawning Logic
     gameState.timeSinceLastSpawn++;
     let spawnDelay = Math.max(8, 35 - (gameState.lastMilestone * 5));
     
-    const isSafetyOn = (gameState.boostActive && gameState.boostTimer < 150) || gameState.spawnCooldown > 0;
+    const isFlashing = gameState.boostActive && gameState.boostTimer < 150;
+    const isSafetyOn = isFlashing || gameState.spawnCooldown > 0;
 
     if (gameState.timeSinceLastSpawn > spawnDelay) {
-        let levelProgress = gameState.score % 1000;
-        let shouldSpawnBoost = false;
+        // Rarity Logic: 
+        // 1. Must have spawned less than 3 this level
+        // 2. Chance is lower (0.02) OR we reached the "Guaranteed" score point for this level
+        let canSpawnBoost = gameState.boostersSpawnedInLevel < gameState.maxBoostersPerLevel;
+        let rollForBoost = Math.random() < 0.02 || (gameState.score >= gameState.nextGuaranteedBoostScore && gameState.boostersSpawnedInLevel === 0);
 
-        if (levelProgress >= 500 && levelProgress < 550 && !gameState.midLevelBoostSpawned) {
-            shouldSpawnBoost = true;
-            gameState.midLevelBoostSpawned = true;
-        } else if (levelProgress >= 950 && !gameState.endLevelBoostSpawned) {
-            shouldSpawnBoost = true;
-            gameState.endLevelBoostSpawned = true;
-        }
-
-        if (shouldSpawnBoost && !gameState.boostActive) {
+        if (canSpawnBoost && rollForBoost && !gameState.boostActive) {
             boosts.push({ x: lanePositions[Math.floor(Math.random()*3)], y: -100 });
+            gameState.boostersSpawnedInLevel++;
             gameState.timeSinceLastSpawn = 0;
         } else if (!isSafetyOn) { 
             const freeLane = Math.floor(Math.random() * 3);
@@ -339,35 +292,35 @@ function loop() {
     ctx.globalAlpha = 1;
 
     if (gameState.started && !gameState.gameOver) {
-        ctx.font = "16px Orbitron"; ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.fillText("SCORE: " + gameState.score, 20, 40);
-        ctx.textAlign = "right"; ctx.fillText("HI: " + gameState.highScore, canvas.width - 20, 40);
+        ctx.font = "18px Orbitron"; ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillText("SCORE: " + gameState.score, 30, 50);
+        ctx.textAlign = "right"; ctx.fillText("HI: " + gameState.highScore, canvas.width - 30, 50);
         ctx.textAlign = "center";
-        ctx.font = "bold 14px Orbitron"; ctx.fillStyle = COLORS.gold;
-        ctx.fillText("LEVEL " + (gameState.lastMilestone + 1), canvas.width/2, 35);
+        ctx.font = "bold 16px Orbitron"; ctx.fillStyle = COLORS.gold;
+        ctx.fillText("LEVEL " + (gameState.lastMilestone + 1), canvas.width/2, 40);
 
         if (gameState.boostActive) {
             ctx.fillStyle = COLORS.boost;
-            ctx.fillRect(canvas.width/2 - 75, 55, (gameState.boostTimer/gameState.boostDuration) * 150, 4);
+            ctx.fillRect(canvas.width/2 - 75, 60, (gameState.boostTimer/gameState.boostDuration) * 150, 4);
         }
     }
 
     if (!gameState.started) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
-        drawNeonText("NEON DASH", 45, COLORS.player, -30, 30);
-        drawNeonText("TAP OR SPACE TO START", 14, "#fff", 20, 10);
-        drawNeonText("SWIPE OR WASD TO MOVE", 12, "#888", 50, 0);
+        drawNeonText("NEON DASH", 75, COLORS.player, -20, 30);
+        drawNeonText("TAP TO START", 18, "#fff", 35, 10);
     } else if (gameState.showGameOverUI) {
         ctx.globalAlpha = Math.min(1.0, gameState.uiTimer * 1.5);
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         const popScale = 1.0 - Math.pow(1 - gameState.uiTimer, 3) * Math.cos(gameState.uiTimer * 3);
-        drawNeonText("CRASHED", 55, COLORS.obstacle, -40, 30, popScale);
-        drawNeonText(`SCORE: ${gameState.score}`, 20, "#fff", 15, 10, popScale);
-        drawNeonText("TAP TO RESTART", 14, "#666", 70, 0, popScale);
+        drawNeonText("CRASHED", 65, COLORS.obstacle, -40, 30, popScale);
+        drawNeonText(`SCORE: ${gameState.score}`, 22, "#fff", 15, 10, popScale);
+        drawNeonText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 45, 15, popScale);
+        drawNeonText("TAP TO RESTART", 14, "#666", 85, 0, popScale);
     } else if (gameState.paused) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
-        drawNeonText("PAUSED", 50, "#fff", -20, 20);
-        drawNeonText("TAP OR SPACE TO RESUME", 14, "#aaa", 30, 5);
+        drawNeonText("PAUSED", 55, "#fff", -20, 20);
+        drawNeonText("SPACE TO RESUME", 16, "#aaa", 30, 5);
     }
 
     update();
