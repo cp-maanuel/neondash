@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NEON DASH 0.1 - OVERDRIVE BLOOM</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+    body { margin: 0; overflow: hidden; background: #020202; font-family: 'Orbitron', sans-serif; user-select: none; }
+    canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+let lanePositions = [];
+
+const COLORS = {
+    player: "#00ffff", 
+    obstacle: "#ff0055", 
+    boost: "#ffcc00",
+    track: "rgba(0, 255, 255, 0.05)",
+    text: "#ffffff"
+};
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const center = canvas.width / 2;
+    lanePositions = [center - 140, center, center + 140];
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* ============ GAME STATE ============ */
+let gameState = {
+    started: false, paused: false, gameOver: false,
+    score: 0, highScore: localStorage.getItem('neonDashHigh') || 0,
+    speed: 8, baseSpeed: 8,
+    startTime: 0, totalPausedTime: 0, pauseStartTime: 0, elapsedTime: 0,
+    lastMinute: 0, timeSinceLastSpawn: 0,
+    boostActive: false, boostTimer: 0, boostDuration: 900
+};
+
+const player = {
+    lane: 1, x: 0, targetX: 0, y: 0, w: 40, h: 40, 
+    vy: 0, groundY: 0, isJumping: false
+};
+
+function initPlayer() {
+    player.groundY = canvas.height - 120;
+    player.y = player.groundY;
+    player.lane = 1;
+    player.targetX = lanePositions[1];
+    player.x = lanePositions[1];
+}
+initPlayer();
+
+let obstacles = [];
+let boosts = [];
+let particles = []; 
+let trail = [];
+
+function resetGame() {
+    gameState.started = true; gameState.paused = false; gameState.gameOver = false;
+    gameState.score = 0; gameState.speed = 8; gameState.baseSpeed = 8;
+    gameState.startTime = Date.now(); gameState.totalPausedTime = 0;
+    gameState.boostActive = false; gameState.boostTimer = 0;
+    obstacles = []; boosts = []; particles = []; trail = [];
+    initPlayer();
+}
+
+function createExplosion(x, y, color, count = 20) {
+    for(let j=0; j<count; j++) {
+        particles.push({
+            x: x, y: y, 
+            vx: (Math.random()-0.5)*12, 
+            vy: (Math.random()-0.5)*12, 
+            life: 1.2, color: color
+        });
+    }
+}
+
+/* ============ INPUT ============ */
+document.addEventListener("keydown", e => {
+    if (e.code === "Space") {
+        if (!gameState.started || gameState.gameOver) resetGame();
+        else {
+            gameState.paused = !gameState.paused;
+            if (gameState.paused) gameState.pauseStartTime = Date.now();
+            else gameState.totalPausedTime += (Date.now() - gameState.pauseStartTime);
+        }
+        return;
+    }
+    if (gameState.paused || gameState.gameOver || !gameState.started) return;
+    if (e.key === "ArrowLeft" && player.lane > 0) { player.lane--; player.targetX = lanePositions[player.lane]; }
+    if (e.key === "ArrowRight" && player.lane < 2) { player.lane++; player.targetX = lanePositions[player.lane]; }
+    if (e.key === "ArrowUp" && !player.isJumping) { player.vy = -20; player.isJumping = true; }
+});
+
+canvas.addEventListener("mousedown", () => {
+    if (!gameState.started || gameState.gameOver) resetGame();
+    else if (gameState.paused) { 
+        gameState.paused = false; 
+        gameState.totalPausedTime += (Date.now() - gameState.pauseStartTime);
+    }
+});
+
+/* ============ DRAWING HELPERS ============ */
+function drawNeonRect(x, y, w, h, color, isPlayer = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    let activeColor = color;
+    if (isPlayer && gameState.boostActive) {
+        // Flicker effect when boost is nearly over
+        activeColor = (gameState.boostTimer < 150 && Math.floor(gameState.boostTimer/10)%2 === 0) ? COLORS.player : COLORS.boost;
+    }
+
+    // Outer Glow - Increased Blur
+    ctx.shadowBlur = isPlayer && gameState.boostActive ? 40 : 25; 
+    ctx.shadowColor = activeColor;
+    
+    // Core shape
+    ctx.fillStyle = activeColor;
+    ctx.fillRect(-w/2, -h, w, h);
+    
+    // Bright highlight core for realism
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillRect(-w/2 + 5, -h + 5, w - 10, h - 10);
+    
+    ctx.restore();
+    ctx.shadowBlur = 0;
+}
+
+/* ============ MAIN LOOP ============ */
+function update() {
+    if (!gameState.started || gameState.paused || gameState.gameOver) return;
+
+    gameState.elapsedTime = Math.floor((Date.now() - gameState.startTime - gameState.totalPausedTime) / 1000);
+    let currentMinute = Math.floor(gameState.elapsedTime / 60);
+    if (currentMinute > gameState.lastMinute) {
+        gameState.baseSpeed += 1.5;
+        gameState.lastMinute = currentMinute;
+    }
+
+    let targetSpeed = gameState.boostActive ? gameState.baseSpeed * 1.5 : gameState.baseSpeed;
+    gameState.speed += (targetSpeed - gameState.speed) * 0.1;
+
+    if (gameState.boostActive) {
+        gameState.boostTimer--;
+        if (gameState.boostTimer <= 0) gameState.boostActive = false;
+    }
+
+    player.x += (player.targetX - player.x) * 0.22;
+    player.vy += 1.3;
+    player.y += player.vy;
+    if (player.y > player.groundY) { player.y = player.groundY; player.vy = 0; player.isJumping = false; }
+
+    // INCREASED DUST TRAIL EFFECT
+    if (Math.random() > 0.1) {
+        trail.push({ 
+            x: player.x + (Math.random() - 0.5) * 20, 
+            y: player.y + 35, 
+            size: Math.random() * 8 + 2, 
+            life: 1.0,
+            vx: (Math.random() - 0.5) * 2 
+        });
+    }
+    trail.forEach(t => { 
+        t.y += gameState.speed * 0.5; 
+        t.x += t.vx;
+        t.life -= 0.025; 
+    });
+    trail = trail.filter(t => t.life > 0);
+
+    // Obstacle & Boost Spawning (Gate Logic)
+    gameState.timeSinceLastSpawn++;
+    if (gameState.timeSinceLastSpawn > Math.max(12, 35 - (currentMinute * 4))) {
+        if (Math.random() < 0.05 && !gameState.boostActive) {
+            boosts.push({ x: lanePositions[Math.floor(Math.random()*3)], y: -100 });
+        } else {
+            const freeLane = Math.floor(Math.random() * 3);
+            [0, 1, 2].forEach(l => {
+                if (l !== freeLane) {
+                    obstacles.push({ x: lanePositions[l], y: -100, w: 50, h: 50 });
+                }
+            });
+        }
+        gameState.timeSinceLastSpawn = 0;
+    }
+
+    // Collision Checks
+    for (let i = boosts.length - 1; i >= 0; i--) {
+        boosts[i].y += gameState.speed;
+        if (Math.hypot(player.x - boosts[i].x, (player.y - 20) - boosts[i].y) < 40) {
+            gameState.boostActive = true;
+            gameState.boostTimer = gameState.boostDuration;
+            boosts.splice(i, 1);
+        } else if (boosts[i].y > canvas.height + 50) boosts.splice(i, 1);
+    }
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let o = obstacles[i];
+        o.y += gameState.speed;
+        if (player.x - 20 < o.x + 20 && player.x + 20 > o.x - 20 && player.y - 40 < o.y && player.y > o.y - 50) {
+            if (gameState.boostActive) {
+                createExplosion(o.x, o.y, COLORS.boost, 12);
+                obstacles.splice(i, 1);
+                gameState.score += 50;
+            } else {
+                gameState.gameOver = true;
+                createExplosion(player.x, player.y, COLORS.player, 30);
+                if (gameState.score > gameState.highScore) {
+                    gameState.highScore = gameState.score;
+                    localStorage.setItem('neonDashHigh', gameState.highScore);
+                }
+            }
+        } else if (o.y > canvas.height + 100) { obstacles.splice(i, 1); gameState.score += 10; }
+    }
+
+    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; });
+    particles = particles.filter(p => p.life > 0);
+}
+
+function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Grid Lines
+    ctx.strokeStyle = COLORS.track; ctx.lineWidth = 2;
+    lanePositions.forEach(x => { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); });
+
+    // Render Dust Trail
+    trail.forEach(t => {
+        ctx.globalAlpha = t.life * 0.5;
+        ctx.fillStyle = gameState.boostActive ? COLORS.boost : COLORS.player;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.fillRect(t.x - t.size/2, t.y, t.size, t.size);
+    });
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    // Entities
+    if (!gameState.gameOver) drawNeonRect(player.x, player.y + player.h, player.w, player.h, COLORS.player, true);
+    obstacles.forEach(o => drawNeonRect(o.x, o.y, o.w, o.h, COLORS.obstacle));
+    
+    boosts.forEach(b => {
+        ctx.fillStyle = COLORS.boost; ctx.shadowBlur = 20; ctx.shadowColor = COLORS.boost;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 12, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+    });
+
+    // Particles (Explosions)
+    particles.forEach(p => { 
+        ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 5, 5);
+    });
+    ctx.globalAlpha = 1;
+
+    // UI
+    if (gameState.started && !gameState.gameOver) {
+        ctx.font = "18px Orbitron"; ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillText("SCORE: " + gameState.score, 30, 50);
+        ctx.textAlign = "right"; ctx.fillText("HI: " + gameState.highScore, canvas.width - 30, 50);
+        if (gameState.boostActive) {
+            ctx.fillStyle = COLORS.boost;
+            ctx.fillRect(canvas.width/2 - 75, 70, (gameState.boostTimer/gameState.boostDuration) * 150, 4);
+        }
+    }
+
+    if (!gameState.started) {
+        drawText("NEON DASH", 75, COLORS.player, -20);
+        drawText("TAP TO START", 18, "#fff", 35);
+    } else if (gameState.gameOver) {
+        drawText("CRASHED", 65, COLORS.obstacle, -20);
+        drawText(`FINAL SCORE: ${gameState.score}`, 22, "#fff", 25);
+        drawText("TAP TO RESTART", 14, "#666", 65);
+    } else if (gameState.paused) {
+        ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+        drawText("PAUSED", 55, "#fff", -20);
+        drawText("SPACE TO RESUME", 16, "#aaa", 30);
+    }
+
+    update();
+    requestAnimationFrame(loop);
+}
+
+function drawText(text, size, color, offset) {
+    ctx.textAlign = "center"; ctx.font = `bold ${size}px Orbitron`;
+    ctx.fillStyle = color; ctx.fillText(text, canvas.width/2, canvas.height/2 + offset);
+}
+
+loop();
+</script>
+</body>
+</html>
