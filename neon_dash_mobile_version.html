@@ -1,4 +1,4 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -15,31 +15,40 @@
         width: 100%;
         display: flex;
         justify-content: space-between;
-        padding: 0 40px;
+        align-items: center;
+        padding: 0 30px;
         box-sizing: border-box;
         pointer-events: none;
-        transition: opacity 0.4s ease; /* Smooth fade for UI */
+        transition: opacity 0.4s ease;
     }
     
     .btn {
-        width: 75px;
-        height: 75px;
-        border: 3px solid #ffffff; /* Changed to White */
-        border-radius: 50%; /* Circular for a smoother look */
+        width: 70px;
+        height: 70px;
+        border: 2px solid #ffffff;
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         color: #ffffff;
-        font-size: 28px;
-        background: rgba(255, 255, 255, 0.1);
-        box-shadow: 0 0 15px rgba(255, 255, 255, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.2);
+        font-size: 24px;
+        background: rgba(255, 255, 255, 0.05);
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
         pointer-events: auto;
-        transition: transform 0.1s, background 0.2s;
+        transition: transform 0.1s;
+    }
+
+    /* Small Pause Button Styling */
+    .btn-pause {
+        width: 50px;
+        height: 50px;
+        font-size: 18px;
+        border: 1.5px solid rgba(255, 255, 255, 0.5);
+        background: transparent;
+        box-shadow: none;
     }
     
-    .btn:active { transform: scale(0.85); background: rgba(255, 255, 255, 0.4); }
-    
-    /* Hidden state for Loading and Crash screens */
+    .btn:active { transform: scale(0.85); background: rgba(255, 255, 255, 0.3); }
     .ui-hidden { opacity: 0; pointer-events: none; }
 </style>
 </head>
@@ -47,6 +56,7 @@
 
 <div class="mobile-controls ui-hidden" id="ui-controls">
     <div class="btn" id="left-btn">◀</div>
+    <div class="btn btn-pause" id="pause-btn">⏸</div>
     <div class="btn" id="right-btn">▶</div>
 </div>
 
@@ -78,6 +88,7 @@ resize();
 
 let gameState = {
     started: false,
+    paused: false,
     gameOver: false,
     showGameOverUI: false,
     uiTimer: 0, 
@@ -89,10 +100,7 @@ let gameState = {
     timeSinceLastSpawn: 0
 };
 
-const player = { 
-    lane: 1, x: 0, targetX: 0, y: 0, w: 40, h: 40, 
-    vy: 0, groundY: 0, isJumping: false 
-};
+const player = { lane: 1, x: 0, targetX: 0, y: 0, w: 40, h: 40, vy: 0, groundY: 0, isJumping: false };
 
 let obstacles = [];
 let particles = []; 
@@ -108,20 +116,28 @@ function initPlayer() {
 }
 initPlayer();
 
+function resetToHome() {
+    gameState.started = false;
+    gameState.paused = false;
+    gameState.gameOver = false;
+    uiLayer.classList.add('ui-hidden');
+    obstacles = [];
+    particles = [];
+    dustTrail = [];
+}
+
 function createExplosion(x, y, color, count) {
     for (let i = 0; i < count; i++) {
         particles.push({
-            x: x, y: y,
-            vx: (Math.random() - 0.5) * 20,
-            vy: (Math.random() - 0.5) * 20,
-            life: 1.0, color: color,
-            size: Math.random() * 5 + 2
+            x: x, y: y, vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 20,
+            life: 1.0, color: color, size: Math.random() * 5 + 2
         });
     }
 }
 
 function resetGame() {
     gameState.started = true; 
+    gameState.paused = false;
     gameState.gameOver = false;
     gameState.showGameOverUI = false; 
     gameState.deathTimer = 0; 
@@ -133,32 +149,50 @@ function resetGame() {
     particles = []; 
     dustTrail = [];
     initPlayer();
-    uiLayer.classList.remove('ui-hidden'); // Show arrows
+    uiLayer.classList.remove('ui-hidden');
 }
+
+function togglePause() {
+    if (gameState.started && !gameState.gameOver) {
+        gameState.paused = !gameState.paused;
+    }
+}
+
+/* ============ INPUT ============ */
+document.getElementById("left-btn").addEventListener("touchstart", (e) => { e.preventDefault(); if(!gameState.paused) moveLeft(); });
+document.getElementById("right-btn").addEventListener("touchstart", (e) => { e.preventDefault(); if(!gameState.paused) moveRight(); });
+document.getElementById("pause-btn").addEventListener("touchstart", (e) => { e.preventDefault(); togglePause(); });
 
 function moveLeft() { if (player.lane > 0 && !gameState.gameOver) { player.lane--; player.targetX = lanePositions[player.lane]; } }
 function moveRight() { if (player.lane < 2 && !gameState.gameOver) { player.lane++; player.targetX = lanePositions[player.lane]; } }
 function jump() { if (!player.isJumping && !gameState.gameOver) { player.vy = -17; player.isJumping = true; } }
 
-document.getElementById("left-btn").addEventListener("touchstart", (e) => { e.preventDefault(); moveLeft(); });
-document.getElementById("right-btn").addEventListener("touchstart", (e) => { e.preventDefault(); moveRight(); });
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
-    if (!gameState.started || gameState.showGameOverUI) resetGame();
-    else if (!gameState.gameOver) jump();
+    const touchY = e.touches[0].clientY;
+    
+    if (!gameState.started || gameState.showGameOverUI) {
+        resetGame();
+    } else if (gameState.paused) {
+        // Simple click detection for "Home" button area
+        if (touchY > canvas.height / 2 + 50 && touchY < canvas.height / 2 + 120) {
+            resetToHome();
+        } else {
+            gameState.paused = false;
+        }
+    } else if (!gameState.gameOver) {
+        // Tap top 80% of screen to jump (avoiding button interference)
+        if (touchY < canvas.height - 150) jump();
+    }
 });
 
+/* ============ RENDER ============ */
 function drawNeonRect(x, y, w, h, color, glow, isPlayer = false) {
     ctx.save();
     ctx.shadowBlur = glow + (isPlayer ? Math.sin(Date.now()/120)*10 : 0);
     ctx.shadowColor = color;
     ctx.fillStyle = color;
     ctx.fillRect(x - w/2, y - h, w, h);
-    
-    // Glossy Polish
-    ctx.fillStyle = "#fff";
-    ctx.globalAlpha = 0.25;
-    ctx.fillRect(x - w/2 + 4, y - h + 4, w - 8, h/2.5);
     ctx.restore();
 }
 
@@ -176,6 +210,8 @@ function drawText(text, size, color, yOffset, glow = 0, scale = 1) {
 }
 
 function update() {
+    if (!gameState.started || gameState.paused) return;
+
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].x += particles[i].vx;
         particles[i].y += particles[i].vy;
@@ -183,10 +219,8 @@ function update() {
         if (particles[i].life <= 0) particles.splice(i, 1);
     }
 
-    if (!gameState.started) return;
-
     if (gameState.gameOver) {
-        if (!uiLayer.classList.contains('ui-hidden')) uiLayer.classList.add('ui-hidden'); // Hide arrows on crash
+        if (!uiLayer.classList.contains('ui-hidden')) uiLayer.classList.add('ui-hidden');
         gameState.deathTimer++;
         if (gameState.deathTimer > 45) {
             gameState.showGameOverUI = true;
@@ -199,29 +233,22 @@ function update() {
     gameState.baseSpeed += 0.0007; 
     gameState.speed = gameState.baseSpeed;
 
-    // Smoother movement interpolation
     player.x += (player.targetX - player.x) * 0.18; 
-    player.vy += 0.85; // Lower gravity for smoother jumps
+    player.vy += 0.85; 
     player.y += player.vy;
     if (player.y > player.groundY) { player.y = player.groundY; player.vy = 0; player.isJumping = false; }
 
     if (!player.isJumping) {
-        dustTrail.push({
-            x: player.x + (Math.random() - 0.5) * 15,
-            y: player.y,
-            size: Math.random() * 5 + 1,
-            life: 0.8
-        });
+        dustTrail.push({ x: player.x + (Math.random() - 0.5) * 15, y: player.y, size: Math.random() * 5 + 1, life: 0.8 });
     }
 
     gameState.timeSinceLastSpawn++;
     if (gameState.timeSinceLastSpawn > Math.max(18, 45 - gameState.baseSpeed)) {
-        const spawnDouble = Math.random() > 0.65;
-        if (spawnDouble) {
-            const safeLane = Math.floor(Math.random() * 3);
-            [0, 1, 2].forEach(l => { if (l !== safeLane) obstacles.push({ x: lanePositions[l], y: -100 }); });
-        } else {
-            obstacles.push({ x: lanePositions[Math.floor(Math.random() * 3)], y: -100 });
+        const lane = Math.floor(Math.random() * 3);
+        obstacles.push({ x: lanePositions[lane], y: -100 });
+        if (Math.random() > 0.7) { // Chance for a second block
+            let lane2; do { lane2 = Math.floor(Math.random()*3); } while(lane2 === lane);
+            obstacles.push({ x: lanePositions[lane2], y: -100 });
         }
         gameState.timeSinceLastSpawn = 0;
     }
@@ -229,11 +256,9 @@ function update() {
     for (let i = obstacles.length - 1; i >= 0; i--) {
         let o = obstacles[i];
         o.y += gameState.speed;
-        // Collision check
         if (Math.abs(player.x - o.x) < 32 && Math.abs((player.y - 20) - o.y) < 32) {
             gameState.gameOver = true;
             createExplosion(player.x, player.y - 20, COLORS.player, 35);
-            createExplosion(o.x, o.y, COLORS.obstacle, 15);
             if (gameState.score > gameState.highScore) {
                 gameState.highScore = Math.floor(gameState.score);
                 localStorage.setItem('neonDashHigh', gameState.highScore);
@@ -252,12 +277,10 @@ function loop() {
     ctx.fillStyle = "#010101";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Track
     ctx.strokeStyle = COLORS.track;
     ctx.lineWidth = 3;
     lanePositions.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
 
-    // Dust
     dustTrail.forEach(d => {
         ctx.globalAlpha = d.life * 0.3;
         ctx.fillStyle = COLORS.player;
@@ -265,28 +288,28 @@ function loop() {
     });
     ctx.globalAlpha = 1;
 
-    if (!gameState.gameOver) {
-        drawNeonRect(player.x, player.y, 40, 40, COLORS.player, 40, true);
-    }
-    
+    if (!gameState.gameOver) drawNeonRect(player.x, player.y, 40, 40, COLORS.player, 40, true);
     obstacles.forEach(o => drawNeonRect(o.x, o.y, 45, 45, COLORS.obstacle, 25));
-    
     particles.forEach(p => {
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, p.size, p.size);
+        ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size);
     });
     ctx.globalAlpha = 1;
 
+    // UI Logic
     if (!gameState.started) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawText("NEON DASH", 42, COLORS.player, -20, 30);
         drawText("TAP TO START", 15, "#fff", 30);
+    } else if (gameState.paused) {
+        ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
+        drawText("PAUSED", 48, "#fff", -60, 20);
+        drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, COLORS.player, 0);
+        drawText("TAP TO RESUME", 14, "#fff", 50);
+        drawText("HOME", 18, COLORS.obstacle, 100, 10);
     } else if (gameState.showGameOverUI) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         const pop = Math.min(1, gameState.uiTimer);
         const scale = 1.0 + Math.sin(pop * Math.PI) * 0.1; 
-
         drawText("CRASHED", 48, COLORS.obstacle, -60, 35, scale);
         drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, "#fff", 0, 0, scale);
         drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 35, 15, scale);
