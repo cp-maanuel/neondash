@@ -13,7 +13,6 @@
         position: absolute;
         bottom: 30px;
         width: 100%;
-        display: space-between;
         display: flex;
         justify-content: space-between;
         padding: 0 40px;
@@ -70,7 +69,6 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-/* ============ GAME STATE ============ */
 let gameState = {
     started: false,
     gameOver: false,
@@ -79,8 +77,8 @@ let gameState = {
     deathTimer: 0,
     score: 0,
     highScore: parseInt(localStorage.getItem('neonDashHigh')) || 0,
-    speed: 7,
-    baseSpeed: 7,
+    speed: 6.5, // Slightly slower start
+    baseSpeed: 6.5,
     timeSinceLastSpawn: 0
 };
 
@@ -118,12 +116,11 @@ function createExplosion(x, y, color, count) {
 function resetGame() {
     gameState.started = true; gameState.gameOver = false;
     gameState.showGameOverUI = false; gameState.deathTimer = 0; gameState.uiTimer = 0;
-    gameState.score = 0; gameState.speed = 7; gameState.baseSpeed = 7;
+    gameState.score = 0; gameState.speed = 6.5; gameState.baseSpeed = 6.5;
     obstacles = []; particles = []; dustTrail = [];
     initPlayer();
 }
 
-/* ============ INPUT ============ */
 function moveLeft() { if (player.lane > 0 && !gameState.gameOver) { player.lane--; player.targetX = lanePositions[player.lane]; } }
 function moveRight() { if (player.lane < 2 && !gameState.gameOver) { player.lane++; player.targetX = lanePositions[player.lane]; } }
 function jump() { if (!player.isJumping && !gameState.gameOver) { player.vy = -18; player.isJumping = true; } }
@@ -136,7 +133,6 @@ canvas.addEventListener("touchstart", (e) => {
     else if (!gameState.gameOver) jump();
 });
 
-/* ============ RENDER HELPERS ============ */
 function drawNeonRect(x, y, w, h, color, glow, isPlayer = false) {
     ctx.save();
     ctx.shadowBlur = glow + (isPlayer ? Math.sin(Date.now()/100)*8 : 0);
@@ -162,9 +158,7 @@ function drawText(text, size, color, yOffset, glow = 0, scale = 1) {
     ctx.restore();
 }
 
-/* ============ CORE LOOP ============ */
 function update() {
-    // Update particles even during death delay
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].x += particles[i].vx;
         particles[i].y += particles[i].vy;
@@ -176,18 +170,15 @@ function update() {
 
     if (gameState.gameOver) {
         gameState.deathTimer++;
-        // Wait 40 frames (~0.6s) before showing UI
         if (gameState.deathTimer > 40) {
             gameState.showGameOverUI = true;
-            if (gameState.uiTimer < 1) {
-                gameState.uiTimer += 0.07; // Pop animation speed
-            }
+            if (gameState.uiTimer < 1) gameState.uiTimer += 0.07;
         }
         return;
     }
 
-    gameState.score += 0.25;
-    gameState.baseSpeed += 0.0012;
+    gameState.score += 0.2; // Slower score build up
+    gameState.baseSpeed += 0.0008; // Decreased speed scaling
     gameState.speed = gameState.baseSpeed;
 
     player.x += (player.targetX - player.x) * 0.25;
@@ -205,9 +196,20 @@ function update() {
     }
 
     gameState.timeSinceLastSpawn++;
-    if (gameState.timeSinceLastSpawn > Math.max(10, 32 - gameState.baseSpeed)) {
-        const safeLane = Math.floor(Math.random() * 3);
-        [0, 1, 2].forEach(l => { if (l !== safeLane) obstacles.push({ x: lanePositions[l], y: -100 }); });
+    // Increased spawn gap for easier gameplay
+    if (gameState.timeSinceLastSpawn > Math.max(15, 40 - gameState.baseSpeed)) {
+        
+        // DIFFICULTY ADJUSTMENT: 60% chance for 1 block, 40% chance for 2 blocks
+        const spawnDouble = Math.random() > 0.6;
+        
+        if (spawnDouble) {
+            const safeLane = Math.floor(Math.random() * 3);
+            [0, 1, 2].forEach(l => { if (l !== safeLane) obstacles.push({ x: lanePositions[l], y: -100 }); });
+        } else {
+            const dangerLane = Math.floor(Math.random() * 3);
+            obstacles.push({ x: lanePositions[dangerLane], y: -100 });
+        }
+        
         gameState.timeSinceLastSpawn = 0;
     }
 
@@ -236,12 +238,10 @@ function loop() {
     ctx.fillStyle = "#010101";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Track
     ctx.strokeStyle = COLORS.track;
     ctx.lineWidth = 2;
     lanePositions.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
 
-    // Dust
     dustTrail.forEach(d => {
         ctx.globalAlpha = d.life * 0.4;
         ctx.fillStyle = COLORS.player;
@@ -249,14 +249,12 @@ function loop() {
     });
     ctx.globalAlpha = 1;
 
-    // Entities
     if (!gameState.gameOver) {
         drawNeonRect(player.x, player.y, 40, 40, COLORS.player, 35, true);
     }
     
     obstacles.forEach(o => drawNeonRect(o.x, o.y, 45, 45, COLORS.obstacle, 20));
     
-    // Particles
     particles.forEach(p => {
         ctx.globalAlpha = p.life;
         ctx.shadowBlur = 15;
@@ -266,15 +264,12 @@ function loop() {
     });
     ctx.globalAlpha = 1;
 
-    // UI
     if (!gameState.started) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawText("NEON DASH", 40, COLORS.player, -20, 25);
         drawText("TAP TO START", 16, "#fff", 30);
     } else if (gameState.showGameOverUI) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
-        
-        // Elastic Pop scale calculation
         const pop = Math.min(1, gameState.uiTimer);
         const scale = 1.0 + Math.sin(pop * Math.PI) * 0.1; 
 
