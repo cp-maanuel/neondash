@@ -38,15 +38,25 @@
         transition: transform 0.1s;
     }
 
-    /* Small Pause Button Styling */
+    /* Pause Button - Two Lines Icon */
     .btn-pause {
         width: 50px;
         height: 50px;
-        font-size: 18px;
-        border: 1.5px solid rgba(255, 255, 255, 0.5);
+        border: 1.5px solid rgba(255, 255, 255, 0.6);
         background: transparent;
         box-shadow: none;
+        position: relative;
     }
+    .btn-pause::before, .btn-pause::after {
+        content: '';
+        position: absolute;
+        width: 4px;
+        height: 18px;
+        background: white;
+        border-radius: 2px;
+    }
+    .btn-pause::before { left: 18px; }
+    .btn-pause::after { right: 18px; }
     
     .btn:active { transform: scale(0.85); background: rgba(255, 255, 255, 0.3); }
     .ui-hidden { opacity: 0; pointer-events: none; }
@@ -56,7 +66,7 @@
 
 <div class="mobile-controls ui-hidden" id="ui-controls">
     <div class="btn" id="left-btn">◀</div>
-    <div class="btn btn-pause" id="pause-btn">⏸</div>
+    <div class="btn btn-pause" id="pause-btn"></div>
     <div class="btn" id="right-btn">▶</div>
 </div>
 
@@ -120,6 +130,7 @@ function resetToHome() {
     gameState.started = false;
     gameState.paused = false;
     gameState.gameOver = false;
+    gameState.showGameOverUI = false;
     uiLayer.classList.add('ui-hidden');
     obstacles = [];
     particles = [];
@@ -171,17 +182,15 @@ canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     const touchY = e.touches[0].clientY;
     
-    if (!gameState.started || gameState.showGameOverUI) {
+    if (!gameState.started) {
         resetGame();
     } else if (gameState.paused) {
-        // Simple click detection for "Home" button area
-        if (touchY > canvas.height / 2 + 50 && touchY < canvas.height / 2 + 120) {
-            resetToHome();
-        } else {
-            gameState.paused = false;
-        }
+        if (touchY > canvas.height / 2 + 50 && touchY < canvas.height / 2 + 120) resetToHome();
+        else gameState.paused = false;
+    } else if (gameState.showGameOverUI) {
+        if (touchY > canvas.height / 2 + 80 && touchY < canvas.height / 2 + 140) resetToHome();
+        else resetGame();
     } else if (!gameState.gameOver) {
-        // Tap top 80% of screen to jump (avoiding button interference)
         if (touchY < canvas.height - 150) jump();
     }
 });
@@ -246,7 +255,7 @@ function update() {
     if (gameState.timeSinceLastSpawn > Math.max(18, 45 - gameState.baseSpeed)) {
         const lane = Math.floor(Math.random() * 3);
         obstacles.push({ x: lanePositions[lane], y: -100 });
-        if (Math.random() > 0.7) { // Chance for a second block
+        if (Math.random() > 0.75) {
             let lane2; do { lane2 = Math.floor(Math.random()*3); } while(lane2 === lane);
             obstacles.push({ x: lanePositions[lane2], y: -100 });
         }
@@ -295,7 +304,6 @@ function loop() {
     });
     ctx.globalAlpha = 1;
 
-    // UI Logic
     if (!gameState.started) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawText("NEON DASH", 42, COLORS.player, -20, 30);
@@ -311,9 +319,10 @@ function loop() {
         const pop = Math.min(1, gameState.uiTimer);
         const scale = 1.0 + Math.sin(pop * Math.PI) * 0.1; 
         drawText("CRASHED", 48, COLORS.obstacle, -60, 35, scale);
-        drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, "#fff", 0, 0, scale);
-        drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 35, 15, scale);
-        drawText("TAP TO RESTART", 13, "#666", 85, 0, scale);
+        drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, "#fff", -10, 0, scale);
+        drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 25, 15, scale);
+        drawText("TAP TO RESTART", 13, "#fff", 75, 0, scale);
+        drawText("HOME", 16, COLORS.obstacle, 115, 10, scale);
     } else {
         ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.font = "bold 16px Orbitron"; ctx.textAlign = "left";
         ctx.fillText(`SCORE: ${Math.floor(gameState.score)}`, 25, 45);
