@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>NEON DASH 0.4 - FADE EDITION</title>
+<title>NEON DASH 0.5 - NAVIGATION REFINED</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
     body { margin: 0; overflow: hidden; background: #000000; font-family: 'Orbitron', sans-serif; user-select: none; touch-action: none; }
@@ -72,13 +72,12 @@
     }
     .btn-pause.is-paused::after { opacity: 0; transform: scale(0); }
 
-    /* === UPDATED HOME BUTTON (CYAN COLOR) === */
+    /* === HOME BUTTON (CYAN) === */
     #home-btn {
         position: absolute;
         left: 50%;
         transform: translate(-50%, -50%);
         padding: 10px 35px;
-        /* Changed from Pink (#ff0055) to Cyan (#00ffff) to match Title */
         border: 2px solid #00ffff;
         background: rgba(0, 255, 255, 0.1);
         color: #00ffff;
@@ -152,7 +151,7 @@ let gameState = {
     speed: 6.5,
     baseSpeed: 6.5,
     timeSinceLastSpawn: 0,
-    fadeLevel: 0 // New property for fade transition
+    fadeLevel: 0
 };
 
 const player = { lane: 1, x: 0, targetX: 0, y: 0, w: 40, h: 40, vy: 0, groundY: 0, isJumping: false };
@@ -176,7 +175,7 @@ function resetToHome() {
     gameState.paused = false;
     gameState.gameOver = false;
     gameState.showGameOverUI = false;
-    gameState.fadeLevel = 0; // Reset fade
+    gameState.fadeLevel = 0;
     uiLayer.classList.add('ui-hidden');
     homeBtn.classList.add('ui-hidden');
     pauseBtn.classList.remove('is-paused');
@@ -195,11 +194,7 @@ function createExplosion(x, y, color, count) {
 }
 
 function resetGame() {
-    // Logic: If coming from Home (not retry), we set fadeLevel to 1.0
-    if (!gameState.started) {
-        gameState.fadeLevel = 1.0;
-    }
-
+    if (!gameState.started) gameState.fadeLevel = 1.0;
     gameState.started = true; 
     gameState.paused = false;
     gameState.gameOver = false;
@@ -248,11 +243,10 @@ canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     const touchY = e.touches[0].clientY;
     
-    // Only allow starting if not already started
     if (!gameState.started) {
         resetGame();
     } else if (gameState.showGameOverUI) {
-        resetGame();
+        // REMOVED: resetGame() on tap. User must now click HOME button.
     } else if (!gameState.gameOver && !gameState.paused) {
         if (touchY < canvas.height - 150) jump();
     }
@@ -261,19 +255,15 @@ canvas.addEventListener("touchstart", (e) => {
 /* ============ RENDER ============ */
 function drawNeonShape(x, y, w, h, color, glow, isPlayer = false) {
     ctx.save();
-    
-    // UPDATED: Removed animation logic (Math.sin). Now purely static glow for player.
     ctx.shadowBlur = glow; 
     ctx.shadowColor = color;
     ctx.fillStyle = color;
-    
     if (isPlayer) {
         ctx.beginPath();
         ctx.moveTo(x, y - h);          
         ctx.lineTo(x - w/2, y);      
         ctx.lineTo(x + w/2, y);      
-        ctx.closePath();
-        ctx.fill();
+        ctx.closePath(); ctx.fill();
     } else {
         ctx.fillRect(x - w/2, y - h, w, h);
     }
@@ -284,21 +274,16 @@ function drawText(text, size, color, yOffset, glow = 0, scale = 1) {
     ctx.save();
     ctx.translate(canvas.width/2, canvas.height/2 + yOffset);
     ctx.scale(scale, scale);
-    ctx.shadowBlur = glow;
-    ctx.shadowColor = color;
-    ctx.fillStyle = color;
-    ctx.font = `bold ${size}px Orbitron`;
-    ctx.textAlign = "center";
+    ctx.shadowBlur = glow; ctx.shadowColor = color; ctx.fillStyle = color;
+    ctx.font = `bold ${size}px Orbitron`; ctx.textAlign = "center";
     ctx.fillText(text, 0, 0);
     ctx.restore();
 }
 
 function update() {
     if (!gameState.started || gameState.paused) return;
-
-    // Handle fade transition
     if (gameState.fadeLevel > 0) {
-        gameState.fadeLevel -= 0.02; // Adjust speed of fade here
+        gameState.fadeLevel -= 0.02;
         if (gameState.fadeLevel < 0) gameState.fadeLevel = 0;
     }
 
@@ -314,7 +299,7 @@ function update() {
             gameState.showGameOverUI = true;
             if (gameState.uiTimer < 1) gameState.uiTimer += 0.08;
             homeBtn.classList.remove('ui-hidden');
-            homeBtn.style.top = (canvas.height / 2 + 100) + "px";
+            homeBtn.style.top = (canvas.height / 2 + 60) + "px"; // Shifted up slightly as Restart is gone
         }
         return;
     }
@@ -363,47 +348,34 @@ function update() {
 }
 
 function loop() {
-    // 1. Draw Background
-    // If we are at Home (not started), draw pure Black.
-    // If we are In Game, we draw the track, then overlay the fade effect if active.
-    
-    ctx.fillStyle = "#000000"; 
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#000000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (gameState.started) {
-        // === GAME RENDER ===
         ctx.strokeStyle = COLORS.track; ctx.lineWidth = 3;
         lanePositions.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
-
         dustTrail.forEach(d => {
             ctx.globalAlpha = d.life * 0.3; ctx.fillStyle = COLORS.player;
             ctx.beginPath(); ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2); ctx.fill();
         });
         ctx.globalAlpha = 1;
-
         if (!gameState.gameOver) drawNeonShape(player.x, player.y, 40, 40, COLORS.player, 40, true);
         obstacles.forEach(o => drawNeonShape(o.x, o.y, 45, 45, COLORS.obstacle, 25));
         particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); });
         ctx.globalAlpha = 1;
-        
-        // FADE IN TRANSITION OVERLAY
         if (gameState.fadeLevel > 0) {
             ctx.fillStyle = `rgba(0, 0, 0, ${gameState.fadeLevel})`;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
     }
 
-    // === UI LAYERS ===
-    
     if (!gameState.started) {
-        // HOME SCREEN: Pure Black Background (already drawn), Text on top
-        // No semi-transparent overlay needed because background is #000000
         drawText("NEON DASH", 42, COLORS.player, -20, 30);
         drawText("TAP TO START", 15, "#fff", 30);
     } else if (gameState.paused) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawText("PAUSED", 48, "#fff", -60, 20); 
-        drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, COLORS.player, 0);
+        // UPDATED: Score color is now Pink (#ff0055)
+        drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, COLORS.obstacle, 0);
     } else if (gameState.showGameOverUI) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         const pop = Math.min(1, gameState.uiTimer);
@@ -411,9 +383,8 @@ function loop() {
         drawText("CRASHED", 48, COLORS.obstacle, -100, 35, scale);
         drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, "#fff", -50, 0, scale);
         drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 0, 15, scale);
-        drawText("TAP TO RESTART", 13, "#fff", 50, 0, scale);
+        // REMOVED: "TAP TO RESTART" text
     } else if (gameState.started) {
-        // In-game score
         ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.font = "bold 16px Orbitron"; ctx.textAlign = "left";
         ctx.fillText(`SCORE: ${Math.floor(gameState.score)}`, 25, 45);
         ctx.textAlign = "right"; ctx.fillText(`BEST: ${gameState.highScore}`, canvas.width - 25, 45);
