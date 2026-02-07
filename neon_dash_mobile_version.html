@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>NEON DASH 0.2 - UI REFINED</title>
+<title>NEON DASH 0.3 - PERFECT ALIGN</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
     body { margin: 0; overflow: hidden; background: #010101; font-family: 'Orbitron', sans-serif; user-select: none; touch-action: none; }
@@ -38,7 +38,7 @@
         transition: transform 0.1s;
     }
 
-    /* === PAUSE / RESUME BUTTON STYLING === */
+    /* === PAUSE / RESUME BUTTON === */
     .btn-pause {
         width: 40px;
         height: 40px;
@@ -68,33 +68,32 @@
         border-left: 18px solid white;
         background: transparent;
         box-shadow: none;
-        border-radius: 0;
         left: 14px;
     }
     .btn-pause.is-paused::after { opacity: 0; transform: scale(0); }
 
-    /* === NEW HOME BUTTON STYLING === */
+    /* === REFINED HOME BUTTON === */
     #home-btn {
         position: absolute;
         left: 50%;
-        transform: translateX(-50%);
-        padding: 12px 40px;
+        transform: translate(-50%, -50%); /* Centered on the Y coordinate */
+        padding: 10px 35px;
         border: 2px solid #ff0055;
-        background: rgba(255, 0, 85, 0.15);
+        background: rgba(255, 0, 85, 0.1);
         color: #ff0055;
         font-family: 'Orbitron', sans-serif;
-        font-weight: bold;
-        font-size: 16px;
+        font-weight: 700;
+        font-size: 14px;
         letter-spacing: 2px;
         border-radius: 4px;
-        box-shadow: 0 0 15px rgba(255, 0, 85, 0.4);
+        box-shadow: 0 0 15px rgba(255, 0, 85, 0.3);
         pointer-events: auto;
         z-index: 100;
-        transition: opacity 0.3s, background 0.2s, transform 0.1s;
+        transition: opacity 0.3s;
     }
     #home-btn:active {
-        background: rgba(255, 0, 85, 0.4);
-        transform: translateX(-50%) scale(0.95);
+        background: rgba(255, 0, 85, 0.3);
+        transform: translate(-50%, -50%) scale(0.95);
     }
 
     .btn:active { transform: scale(0.85); background: rgba(255, 255, 255, 0.3); }
@@ -219,7 +218,8 @@ function togglePause() {
         if (gameState.paused) {
             pauseBtn.classList.add('is-paused');
             homeBtn.classList.remove('ui-hidden');
-            homeBtn.style.top = (canvas.height / 2 + 80) + "px"; // Align below score
+            // Align exactly 60 units below Score (which is at center/0)
+            homeBtn.style.top = (canvas.height / 2 + 60) + "px"; 
         } else {
             pauseBtn.classList.remove('is-paused');
             homeBtn.classList.add('ui-hidden');
@@ -240,15 +240,9 @@ function jump() { if (!player.isJumping && !gameState.gameOver) { player.vy = -1
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     const touchY = e.touches[0].clientY;
-    
-    if (!gameState.started) {
-        resetGame();
-    } else if (gameState.paused) {
-        // Only Resume via button now
-    } else if (gameState.showGameOverUI) {
-        // Tapping screen restarts game, clicking HOME button goes home
-        resetGame();
-    } else if (!gameState.gameOver) {
+    if (!gameState.started) resetGame();
+    else if (gameState.showGameOverUI) resetGame();
+    else if (!gameState.gameOver && !gameState.paused) {
         if (touchY < canvas.height - 150) jump();
     }
 });
@@ -259,7 +253,6 @@ function drawNeonShape(x, y, w, h, color, glow, isPlayer = false) {
     ctx.shadowBlur = glow + (isPlayer ? Math.sin(Date.now()/120)*10 : 0);
     ctx.shadowColor = color;
     ctx.fillStyle = color;
-    
     if (isPlayer) {
         ctx.beginPath();
         ctx.moveTo(x, y - h);          
@@ -290,10 +283,8 @@ function update() {
     if (!gameState.started || gameState.paused) return;
 
     for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].x += particles[i].vx;
-        particles[i].y += particles[i].vy;
-        particles[i].life -= 0.025;
-        if (particles[i].life <= 0) particles.splice(i, 1);
+        particles[i].x += particles[i].vx; particles[i].y += particles[i].vy;
+        particles[i].life -= 0.025; if (particles[i].life <= 0) particles.splice(i, 1);
     }
 
     if (gameState.gameOver) {
@@ -302,10 +293,9 @@ function update() {
         if (gameState.deathTimer > 45) {
             gameState.showGameOverUI = true;
             if (gameState.uiTimer < 1) gameState.uiTimer += 0.08;
-            
-            // Show and position Home button for Game Over screen
             homeBtn.classList.remove('ui-hidden');
-            homeBtn.style.top = (canvas.height / 2 + 130) + "px";
+            // Standardized 50-unit gap for Crashed screen (Title -100, Score -50, Best 0, Restart 50, Home 100)
+            homeBtn.style.top = (canvas.height / 2 + 100) + "px";
         }
         return;
     }
@@ -349,31 +339,24 @@ function update() {
 
     for (let i = dustTrail.length - 1; i >= 0; i--) {
         dustTrail[i].y += gameState.speed * 0.4;
-        dustTrail[i].life -= 0.03;
-        if (dustTrail[i].life <= 0) dustTrail.splice(i, 1);
+        dustTrail[i].life -= 0.03; if (dustTrail[i].life <= 0) dustTrail.splice(i, 1);
     }
 }
 
 function loop() {
-    ctx.fillStyle = "#010101";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.strokeStyle = COLORS.track;
-    ctx.lineWidth = 3;
+    ctx.fillStyle = "#010101"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = COLORS.track; ctx.lineWidth = 3;
     lanePositions.forEach(x => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); });
 
     dustTrail.forEach(d => {
-        ctx.globalAlpha = d.life * 0.3;
-        ctx.fillStyle = COLORS.player;
+        ctx.globalAlpha = d.life * 0.3; ctx.fillStyle = COLORS.player;
         ctx.beginPath(); ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2); ctx.fill();
     });
     ctx.globalAlpha = 1;
 
     if (!gameState.gameOver) drawNeonShape(player.x, player.y, 40, 40, COLORS.player, 40, true);
     obstacles.forEach(o => drawNeonShape(o.x, o.y, 45, 45, COLORS.obstacle, 25));
-    particles.forEach(p => {
-        ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size);
-    });
+    particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); });
     ctx.globalAlpha = 1;
 
     if (!gameState.started) {
@@ -382,22 +365,22 @@ function loop() {
         drawText("TAP TO START", 15, "#fff", 30);
     } else if (gameState.paused) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
-        drawText("PAUSED", 48, "#fff", -60, 20);
+        drawText("PAUSED", 48, "#fff", -60, 20); // Spacing: 60 units
         drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, COLORS.player, 0);
     } else if (gameState.showGameOverUI) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         const pop = Math.min(1, gameState.uiTimer);
         const scale = 1.0 + Math.sin(pop * Math.PI) * 0.1; 
-        drawText("CRASHED", 48, COLORS.obstacle, -60, 35, scale);
-        drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, "#fff", -10, 0, scale);
-        drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 25, 15, scale);
-        drawText("TAP TO RESTART", 13, "#fff", 75, 0, scale);
+        // Standardized 50-unit spacing for Game Over screen
+        drawText("CRASHED", 48, COLORS.obstacle, -100, 35, scale);
+        drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, "#fff", -50, 0, scale);
+        drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 0, 15, scale);
+        drawText("TAP TO RESTART", 13, "#fff", 50, 0, scale);
     } else {
         ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.font = "bold 16px Orbitron"; ctx.textAlign = "left";
         ctx.fillText(`SCORE: ${Math.floor(gameState.score)}`, 25, 45);
         ctx.textAlign = "right"; ctx.fillText(`BEST: ${gameState.highScore}`, canvas.width - 25, 45);
     }
-
     update();
     requestAnimationFrame(loop);
 }
