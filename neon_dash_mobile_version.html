@@ -412,23 +412,23 @@ function loop() {
         drawText("NEON DASH", 42, COLORS.player, -40, 30);
         drawText("TAP TO START", 15, "#fff", 10);
         // Show Global Zen Count
-        drawText(`TOTAL ZEN: ${gameState.totalZen}`, 18, COLORS.zen, 60, 15);
+        drawText(`ZEN : ${gameState.totalZen}`, 18, COLORS.zen, 60, 15);
     } else if (gameState.paused) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawText("PAUSED", 48, "#fff", -60, 20); 
-        drawText(`ZEN: ${gameState.score}`, 22, COLORS.obstacle, 0); 
+        drawText(`ZEN : ${gameState.score}`, 22, COLORS.obstacle, 0); 
     } else if (gameState.showGameOverUI) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         const pop = Math.min(1, gameState.uiTimer);
         const scale = 1.0 + Math.sin(pop * Math.PI) * 0.1; 
         drawText("CRASHED", 48, COLORS.obstacle, -100, 35, scale);
-        drawText(`ZEN: ${gameState.score}`, 22, "#fff", -50, 0, scale);
+        drawText(`ZEN : ${gameState.score}`, 22, "#fff", -50, 0, scale);
         // Restored BEST text color to Golden
         drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 0, 15, scale); 
     } else if (gameState.started) {
         ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.font = "bold 16px Orbitron"; ctx.textAlign = "left";
-        ctx.fillText(`ZEN: ${gameState.score}`, 25, 45);
-        ctx.textAlign = "right"; ctx.fillText(`BEST: ${gameState.highScore}`, canvas.width - 25, 45);
+        ctx.fillText(`ZEN : ${gameState.score}`, 25, 45);
+        ctx.textAlign = "right"; ctx.fillText(`BEST : ${gameState.highScore}`, canvas.width - 25, 45);
     }
     
     update();
@@ -438,3 +438,4 @@ loop();
 </script>
 </body>
 </html>
+
