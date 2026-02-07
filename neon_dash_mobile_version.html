@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>NEON DASH 0.7 - ZEN HARVEST</title>
+<title>NEON DASH 0.8 - ZEN TOTAL</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
     body { margin: 0; overflow: hidden; background: #000000; font-family: 'Orbitron', sans-serif; user-select: none; touch-action: none; }
@@ -122,7 +122,8 @@ let lanePositions = [];
 const COLORS = {
     player: "#00ffff", 
     obstacle: "#ff0055", 
-    zen: "#39ff14", // Neon Green
+    zen: "#39ff14", 
+    gold: "#FFD700",
     track: "rgba(0, 255, 255, 0.08)",
     overlay: "rgba(0, 0, 0, 0.85)"
 };
@@ -144,7 +145,8 @@ let gameState = {
     showGameOverUI: false,
     uiTimer: 0, 
     deathTimer: 0,
-    score: 0, // Zens Collected
+    score: 0, // Current Run Zen
+    totalZen: parseInt(localStorage.getItem('neonDashTotalZen')) || 0,
     highScore: parseInt(localStorage.getItem('neonDashZenHigh')) || 0,
     speed: 6.5,
     baseSpeed: 6.5,
@@ -152,7 +154,7 @@ let gameState = {
     fadeLevel: 0
 };
 
-const player = { lane: 1, x: 0, targetX: 0, y: 0, w: 40, h: 40, vy: 0, groundY: 0, isJumping: false };
+const player = { lane: 1, x: 0, targetX: 0, y: 0, w: 40, h: 40, vy: 0, groundY: 0 };
 
 let obstacles = [];
 let zens = []; 
@@ -240,19 +242,13 @@ homeBtn.addEventListener("touchstart", (e) => { e.preventDefault(); resetToHome(
 
 function moveLeft() { if (player.lane > 0 && !gameState.gameOver) { player.lane--; player.targetX = lanePositions[player.lane]; } }
 function moveRight() { if (player.lane < 2 && !gameState.gameOver) { player.lane++; player.targetX = lanePositions[player.lane]; } }
-function jump() { if (!player.isJumping && !gameState.gameOver) { player.vy = -17; player.isJumping = true; } }
 
 canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
-    const touchY = e.touches[0].clientY;
-    
     if (!gameState.started) {
         resetGame();
-    } else if (gameState.showGameOverUI) {
-        // Must use Home Button
-    } else if (!gameState.gameOver && !gameState.paused) {
-        if (touchY < canvas.height - 150) jump();
     }
+    // Jump trigger removed as requested.
 });
 
 /* ============ RENDER ============ */
@@ -270,14 +266,12 @@ function drawNeonShape(x, y, w, h, color, glow, type = 'rect') {
         ctx.closePath(); ctx.fill();
     } else if (type === 'zen') {
         ctx.beginPath();
-        // Diamond Shape
         ctx.moveTo(x, y - h/2);
         ctx.lineTo(x + w/2, y);
         ctx.lineTo(x, y + h/2);
         ctx.lineTo(x - w/2, y);
         ctx.closePath();
         ctx.fill();
-        // Shine
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
         ctx.arc(x, y, w/4, 0, Math.PI*2);
@@ -326,13 +320,9 @@ function update() {
     gameState.speed = gameState.baseSpeed;
 
     player.x += (player.targetX - player.x) * 0.18; 
-    player.vy += 0.85; 
-    player.y += player.vy;
-    if (player.y > player.groundY) { player.y = player.groundY; player.vy = 0; player.isJumping = false; }
+    player.y = player.groundY; // Keep locked to ground since jump is removed
 
-    if (!player.isJumping) {
-        dustTrail.push({ x: player.x + (Math.random() - 0.5) * 15, y: player.y, size: Math.random() * 5 + 1, life: 0.8 });
-    }
+    dustTrail.push({ x: player.x + (Math.random() - 0.5) * 15, y: player.y, size: Math.random() * 5 + 1, life: 0.8 });
 
     gameState.timeSinceLastSpawn++;
     if (gameState.timeSinceLastSpawn > Math.max(18, 45 - gameState.baseSpeed)) {
@@ -376,8 +366,10 @@ function update() {
         if (!z.collected && Math.abs(player.x - z.x) < 35 && Math.abs((player.y - 20) - z.y) < 35) {
             z.collected = true;
             gameState.score += 1; 
-            createExplosion(z.x, z.y, COLORS.zen, 12, 8); // Green sparks
-            zens.splice(i, 1);
+            gameState.totalZen += 1; // Update global total
+            localStorage.setItem('neonDashTotalZen', gameState.totalZen); // Persistent Save
+            createExplosion(z.x, z.y, COLORS.zen, 12, 8);
+            zens.splice(i, i);
         } else if (z.y > canvas.height + 100) {
             zens.splice(i, 1);
         }
@@ -402,7 +394,6 @@ function loop() {
         });
         ctx.globalAlpha = 1;
 
-        // Draw Zens (Size reduced from 30 to 22)
         zens.forEach(z => drawNeonShape(z.x, z.y, 22, 22, COLORS.zen, 20, 'zen'));
 
         if (!gameState.gameOver) drawNeonShape(player.x, player.y, 40, 40, COLORS.player, 40, 'player');
@@ -418,22 +409,25 @@ function loop() {
     }
 
     if (!gameState.started) {
-        drawText("NEON DASH", 42, COLORS.player, -20, 30);
-        drawText("TAP TO START", 15, "#fff", 30);
+        drawText("NEON DASH", 42, COLORS.player, -40, 30);
+        drawText("TAP TO START", 15, "#fff", 10);
+        // Show Global Zen Count
+        drawText(`TOTAL ZEN: ${gameState.totalZen}`, 18, COLORS.zen, 60, 15);
     } else if (gameState.paused) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawText("PAUSED", 48, "#fff", -60, 20); 
-        drawText(`ZENS: ${gameState.score}`, 22, COLORS.obstacle, 0); 
+        drawText(`ZEN: ${gameState.score}`, 22, COLORS.obstacle, 0); 
     } else if (gameState.showGameOverUI) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         const pop = Math.min(1, gameState.uiTimer);
         const scale = 1.0 + Math.sin(pop * Math.PI) * 0.1; 
         drawText("CRASHED", 48, COLORS.obstacle, -100, 35, scale);
-        drawText(`ZENS: ${gameState.score}`, 22, "#fff", -50, 0, scale);
-        drawText(`BEST: ${gameState.highScore}`, 18, COLORS.zen, 0, 15, scale); 
+        drawText(`ZEN: ${gameState.score}`, 22, "#fff", -50, 0, scale);
+        // Restored BEST text color to Golden
+        drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 0, 15, scale); 
     } else if (gameState.started) {
         ctx.fillStyle = "rgba(255,255,255,0.9)"; ctx.font = "bold 16px Orbitron"; ctx.textAlign = "left";
-        ctx.fillText(`ZENS: ${gameState.score}`, 25, 45);
+        ctx.fillText(`ZEN: ${gameState.score}`, 25, 45);
         ctx.textAlign = "right"; ctx.fillText(`BEST: ${gameState.highScore}`, canvas.width - 25, 45);
     }
     
