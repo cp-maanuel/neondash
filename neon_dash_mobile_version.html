@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>NEON DASH 1.4 - UI REFINED</title>
+<title>NEON DASH 1.5 - CLASSIC REFINED</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
     body { margin: 0; overflow: hidden; background: #000000; font-family: 'Orbitron', sans-serif; user-select: none; touch-action: none; }
@@ -312,9 +312,9 @@ function update() {
         return;
     }
 
+    gameState.score += 0.2; // Classic original scoring logic
     gameState.baseSpeed += 0.0007; 
     gameState.speed = gameState.baseSpeed;
-    gameState.score += gameState.speed / 10; 
 
     player.x += (player.targetX - player.x) * 0.18; 
     player.y = player.groundY; 
@@ -397,16 +397,15 @@ function loop() {
         drawText("NEON DASH", 42, COLORS.player, 0, -40, 30);
         drawText("TAP TO START", 15, "#fff", 0, 10);
         
-        // HOME SCREEN: No colon as requested
-        const iconX = canvas.width / 2 - 25; 
+        // HOME SCREEN: Ultra-tight spacing between icon and count
+        const iconX = canvas.width / 2 - 20; 
         const iconY = canvas.height / 2 + 60;
         drawNeonShape(iconX, iconY, 22, 22, COLORS.zen, 20, 'zen');
-        drawText(`${gameState.totalZen}`, 20, COLORS.zen, 12, 68, 15, 1, "left");
+        drawText(`${gameState.totalZen}`, 20, COLORS.zen, 7, 68, 15, 1, "left");
 
     } else if (gameState.paused) {
         ctx.fillStyle = COLORS.overlay; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawText("PAUSED", 48, "#fff", 0, -60, 20); 
-        // Pause Screen: Colon restored
         drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, COLORS.obstacle, 0, 0, 15); 
         drawText(`ZEN: ${gameState.zenRunCount}`, 18, COLORS.zen, 0, 40, 10);
 
@@ -415,13 +414,10 @@ function loop() {
         const pop = Math.min(1, gameState.uiTimer);
         const scale = 1.0 + Math.sin(pop * Math.PI) * 0.1; 
         drawText("CRASHED", 48, COLORS.obstacle, 0, -100, 35, scale);
-        // Crash Screen: Colon restored
         drawText(`SCORE: ${Math.floor(gameState.score)}`, 22, COLORS.obstacle, 0, -50, 15, scale);
         drawText(`BEST: ${gameState.highScore}`, 18, COLORS.gold, 0, 0, 15, scale); 
-        drawText(`ZEN COLLECTED: ${gameState.zenRunCount}`, 14, COLORS.zen, 0, 35, 10, scale);
 
     } else if (gameState.started) {
-        // Gameplay HUD: Colon restored
         ctx.font = "bold 16px Orbitron"; 
         ctx.shadowBlur = 15;
         
